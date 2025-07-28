@@ -83,16 +83,22 @@ server <- function(input, output, session) {
 
       tryCatch({
         print(paste("DEBUG: Extracting data for GMM from column:", input$gmm_col_value))
-        data_for_gmm <- gmm_data_reactive()[[input$gmm_col_value]]
-        data_for_gmm <- as.numeric(na.omit(data_for_gmm))
-        print(paste("DEBUG: Data for GMM prepared. Length:", length(data_for_gmm)))
+        data_for_gmm_vector <- gmm_data_reactive()[[input$gmm_col_value]] # This is a vector
+        data_for_gmm_vector <- as.numeric(na.omit(data_for_gmm_vector))
+        print(paste("DEBUG: Data for GMM prepared. Length:", length(data_for_gmm_vector)))
 
-        if (length(data_for_gmm) < 2) {
+        if (length(data_for_gmm_vector) < 2) {
             stop("Not enough valid data points in the selected column for GMM analysis.")
         }
 
+        # Convert the vector to a single-column matrix before passing to run_gmm
+        data_for_gmm_matrix <- as.matrix(data_for_gmm_vector)
+        print(paste("DEBUG: Data for GMM converted to matrix. Dimensions:", paste(dim(data_for_gmm_matrix), collapse = "x")))
+
+
         print(paste("DEBUG: Calling run_gmm with N components:", input$gmm_n_components))
-        gmm_model_result <- run_gmm(data_for_gmm, G_range = input$gmm_n_components)
+        # Pass the matrix to run_gmm
+        gmm_model_result <- run_gmm(data_for_gmm_matrix, G_range = input$gmm_n_components)
         print("DEBUG: run_gmm call completed.")
 
         print("DEBUG: Calling assign_clusters.")
