@@ -1,153 +1,139 @@
-# R/server/analysis_observers.R
+# analysis_observers.R
 
-# Helper function to perform all input and data validation // AI-generated
-perform_validation <- function(input, data, col_value, col_age, col_gender, enable_directory, selected_dir_reactive, message_rv) {
-  # 1. Check if data file is uploaded
-  if (is.null(data)) {
-    message_rv(list(type = "error", text = "Error: Please upload an Excel file before analyzing."))
-    return(FALSE)
-  }
+call_analysis_observer <- function(input, output, session, data_reactive, selected_dir_reactive, analysis_running, message_rv) {
 
-  # 2. Check if the REQUIRED Value column has been selected
-  if (is.null(col_value) || col_value == "") {
-    message_rv(list(type = "error", text = "Error: Please select a column for Values."))
-    return(FALSE)
-  }
-  # Age and Gender columns are now optional, so no need to check if they are "" or NULL here.
-  # The filtering logic will handle the "None" option.
-
-  # 3. Directory check if auto-save is enabled but no directory is selected
-  if (enable_directory && is.null(selected_dir_reactive())) {
-    message_rv(list(type = "error", text = "Error: Auto-save is enabled, but no directory is selected. Please select a directory."))
-    return(FALSE)
-  }
-
-  # If all checks pass
-  clear_messages(message_rv)
-  return(TRUE)
-}
-
-
-# This function encapsulates the main analysis logic triggered by the analyze_btn 
-call_analysis_observer <- function(input, output, session, data_reactive, selected_dir_reactive, analysis_running) {
+  # Observer for the Analyze button
   observeEvent(input$analyze_btn, {
-    # Indicate analysis started
+    # Check if analysis is already running
+    if (analysis_running()) {
+      message_rv(list(text = "Analysis is already running. Please wait or reset.", type = "warning"))
+      return()
+    }
+
+    # Input validation
+    req(data_reactive()) # Ensure data is loaded
+    if (is.null(input$col_value) || input$col_value == "" ||
+        is.null(input$col_age) || input$col_age == "" ||
+        is.null(input$col_gender) || input$col_gender == "") {
+      message_rv(list(text = "Please select all required columns (Value, Age, Gender).", type = "warning"))
+      return()
+    }
+
+    # Set analysis running flag to TRUE
     analysis_running(TRUE)
-    
-    # Disable button and update UI
-    shinyjs::disable("analyze_btn")
-    shinyjs::html("analyze_btn", "Analyzing...")
-    message_rv(list(type = "info", text = "Analysis in progress..."))
+    message_rv(list(text = "Analysis started...", type = "info"))
 
-    # Define variables from inputs (needed for validation and analysis)
-    col_value <- input$col_value
-    col_age <- input$col_age
-    col_gender <- input$col_gender
+    # Send status to client-side JavaScript for tab disabling
+    session$sendCustomMessage('analysisStatus', TRUE)
 
-    # --- Perform Validation ---
-    if (!perform_validation(input, data_reactive(), col_value, col_age, col_gender,
-                          input$enable_directory, selected_dir_reactive, message_rv)) {
-      analysis_running(FALSE)  # Reset flag here on validation failure
-      shinyjs::enable("analyze_btn")
-      shinyjs::html("analyze_btn", "Analyze")
-      return()
-    }
-
-    # If validation passed, get the clean data
-    data <- data_reactive()
-    units <- input$unit_input
-    gender_choice <- input$gender_choice
-    age_range <- input$age_range
-
-    # --- Data Filtering and Preparation ---
-    gender_map <- list(
-      "M" = c("M", "Male", "male", "Man", "man", "Jongen", "jongen"),
-      "F" = c("F", "V", "Female", "female", "Woman", "woman", "Meisje", "meisje", "Vrouw", "vrouw")
-    )
-
-    processed_data <- data
-
-    if (col_gender != "" && gender_choice %in% c("M", "F")) {
-      processed_data <- subset(processed_data, processed_data[[col_gender]] %in% gender_map[[gender_choice]])
-    }
-
-    if (col_age != "") {
-      processed_data <- subset(processed_data, processed_data[[col_age]] >= age_range[1] & processed_data[[col_age]] <= age_range[2])
-    }
-
-    numeric_data <- as.numeric(na.omit(processed_data[[col_value]]))
-
-    # Ensure enough data points
-    if (length(numeric_data) < 10) {
-      display_analysis_error(output, message_rv, paste0("Error: Not enough data points (", length(numeric_data), ") remaining after filtering for analysis. Please adjust your filters or upload more data."))
-      analysis_running(FALSE)  # Reset flag here
-      shinyjs::enable("analyze_btn")
-      shinyjs::html("analyze_btn", "Analyze")
-      return()
-    }
-
-    # --- RefineR Model Selection ---
-    skewness_value <- moments::skewness(numeric_data)
-    min_data <- min(numeric_data)
-
-    chosen_model <- if (min_data > 0) {
-      if (abs(skewness_value) <= 1) {
-        "BoxCox"
-      } else {
-        "modBoxCox"
-      }
-    } else {
-      "modBoxCox"
-    }
-
-    nbootstrap_value <- switch(input$nbootstrap_speed,
-                              "Fast" = 1,
-                              "Medium" = 100,
-                              "Slow" = 200)
-
-    # --- Perform Reference Interval Estimation ---
-    result <- tryCatch({
-      refineR::findRI(Data = numeric_data, model = chosen_model, NBootstrap = nbootstrap_value, seed = 123)
-    }, error = function(e) {
-      display_analysis_error(output, message_rv, paste("Error during reference interval estimation:", e$message))
-      analysis_running(FALSE)  # Reset flag on error
-      return(NULL)
+    # Use isolate to prevent re-running if only inputs change during computation
+    isolated_inputs <- isolate({
+      list(
+        gender_choice = input$gender_choice,
+        age_range = input$age_range,
+        col_value = input$col_value,
+        col_age = input$col_age,
+        col_gender = input$col_gender,
+        nbootstrap_speed = input$nbootstrap_speed,
+        unit_input = input$unit_input,
+        ref_low = input$ref_low,
+        ref_high = input$ref_high
+      )
     })
 
-    if (is.null(result)) {
-      analysis_running(FALSE)  # Reset flag if analysis failed
-      shinyjs::enable("analyze_btn")
-      shinyjs::html("analyze_btn", "Analyze")
-      return()
-    }
+    tryCatch({
+      # Filter data based on gender and age
+      filtered_data <- filter_data(data_reactive(),
+                                   isolated_inputs$gender_choice,
+                                   isolated_inputs$age_range[1],
+                                   isolated_inputs$age_range[2],
+                                   isolated_inputs$col_gender,
+                                   isolated_inputs$col_age)
 
-    # --- Display Results ---
-    render_results_text(output, result)
+      # Run RefineR analysis
+      refiner_result <- run_refiner_analysis(filtered_data,
+                                             isolated_inputs$col_value,
+                                             isolated_inputs$nbootstrap_speed)
 
-    plot_title_parts <- c()
-    if (col_gender != "") {
-      plot_title_parts <- c(plot_title_parts, ifelse(gender_choice == "Both", "M/F", gender_choice))
-    }
-    if (col_age != "") {
-      plot_title_parts <- c(plot_title_parts, sprintf("A%d-%d", age_range[1], age_range[2]))
-    }
-    plot_title_prefix <- ifelse(length(plot_title_parts) > 0, paste(plot_title_parts, collapse = " "), "All Subjects")
-    plot_title <- sprintf("%s Estimated Reference Interval [%s]", plot_title_prefix, units)
+      # Extract reference intervals
+      reference_intervals <- extract_intervals(refiner_result)
 
-    render_results_plot(output, result, input, plot_title, col_value, units)
+      # Z-transform data if reference intervals are available
+      z_transformed_data <- NULL
+      if (!is.null(reference_intervals) && !is.na(reference_intervals$Lower) && !is.na(reference_intervals$Upper)) {
+        z_transformed_data <- z_transform_data(
+          data_reactive(), # Use original data for z-transform based on col_value
+          isolated_inputs$col_value,
+          reference_intervals$Lower,
+          reference_intervals$Upper
+        )
+      }
 
-    # --- Auto-Save Plot ---
-    if (input$enable_directory) { 
-      save_plot_to_file(result, input, selected_dir_reactive(), plot_title, col_value, units)
-      message_rv(list(type = "success", text = "Analysis complete and graph saved!"))
-    } else {
-      message_rv(list(type = "success", text = "Analysis complete!"))
-      print("Auto-save is disabled. Skipping file generation.")
-    }
+      # Render results
+      output$result_text <- renderPrint({
+        if (!is.null(reference_intervals)) {
+          cat("Reference Interval:\n")
+          print(reference_intervals)
+        } else {
+          cat("No reference interval could be determined.\n")
+        }
+        if (!is.null(refiner_result$details)) {
+          cat("\nRefineR Details:\n")
+          print(refiner_result$details)
+        }
+      })
 
-    # Re-enable analyze button and reset text
-    analysis_running(FALSE)  # Reset flag at the end
-    shinyjs::enable("analyze_btn")
-    shinyjs::html("analyze_btn", "Analyze")
+      # Generate plot
+      output$result_plot <- renderPlot({
+        if (!is.null(filtered_data) && nrow(filtered_data) > 0) {
+          plot_refiner_output(
+            df = filtered_data,
+            value_col_name = isolated_inputs$col_value,
+            age_col_name = isolated_inputs$col_age,
+            gender_col_name = isolated_inputs$col_gender,
+            refiner_output = refiner_result,
+            unit = isolated_inputs$unit_input,
+            input_low = isolated_inputs$ref_low, # Pass the direct input values
+            input_high = isolated_inputs$ref_high, # Pass the direct input values
+            z_data = z_transformed_data # Pass z-transformed data for plotting
+          )
+        } else {
+          plot.new() # Clear plot area if no data
+          text(0.5, 0.5, "No data to plot after filtering.", cex = 1.5)
+        }
+      })
+
+      # Auto-save plot if enabled and directory selected
+      if (input$enable_directory && !is.null(selected_dir_reactive())) {
+        save_plot_to_directory(
+          plot_data = list(
+            df = filtered_data,
+            value_col_name = isolated_inputs$col_value,
+            age_col_name = isolated_inputs$col_age,
+            gender_col_name = isolated_inputs$col_gender,
+            refiner_output = refiner_result,
+            unit = isolated_inputs$unit_input,
+            input_low = isolated_inputs$ref_low,
+            input_high = isolated_inputs$ref_high,
+            z_data = z_transformed_data
+          ),
+          output_dir = selected_dir_reactive(),
+          file_prefix = "RefineR_Plot"
+        )
+        message_rv(list(text = paste0("Plot saved to ", selected_dir_reactive()), type = "success"))
+      }
+
+      message_rv(list(text = "Analysis complete!", type = "success"))
+
+    }, error = function(e) {
+      message_rv(list(text = paste("Analysis Error:", e$message), type = "danger"))
+      # Clear previous results on error
+      output$result_text <- renderPrint({ cat("") })
+      output$result_plot <- renderPlot(plot.new())
+    }, finally = {
+      # Set analysis running flag to FALSE regardless of success or failure
+      analysis_running(FALSE)
+      session$sendCustomMessage('analysisStatus', FALSE) # Update client-side status
+    })
   })
 }

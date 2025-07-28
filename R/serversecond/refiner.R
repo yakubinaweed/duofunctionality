@@ -1,7 +1,7 @@
-library(RefineR)
+library(refineR)
 
 run_refiner <- function(values) {
-  model <- RefineR(values, modelSelection = TRUE, nBootstraps = 1000)
+  model <- RefineR(values, modelSelection = TRUE, nBootstraps = 1)
   return(model)
 }
 
