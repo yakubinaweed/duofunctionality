@@ -37,6 +37,7 @@ ui <- navbarPage(
     ")),
     
     sidebarLayout(
+      #when selecting side bar panel main analysis or second, disable the other button from being clicked to avoid returning to start position
       sidebarPanel(
         style = "padding-right: 15px;",
         
