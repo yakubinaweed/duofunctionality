@@ -106,6 +106,9 @@ ui <- navbarPage(
              fileInput(inputId = "gmm_data_file", label = "Upload Data (Excel File)", accept = c(".xlsx")),
              selectInput(inputId = "gmm_col_value", label = "Select Column for GMM Analysis:",
                          choices = c("None" = ""), selected = ""),
+             # Added for plotting with age
+             selectInput(inputId = "gmm_col_age", label = "Select Column for Age (for plotting):",
+                         choices = c("None" = ""), selected = ""),
              numericInput(inputId = "gmm_n_components", label = "Number of GMM Components:", value = 2, min = 1),
              actionButton("run_gmm_analysis", "Run GMM Analysis", class = "btn-primary"),
              actionButton("reset_gmm_btn", "Reset GMM Data", class = "btn-secondary")
