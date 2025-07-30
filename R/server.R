@@ -7,12 +7,15 @@ library(tidyverse) # Includes dplyr, ggplot2, tibble, etc.
 library(mclust) # For GMM analysis
 library(moments) # For skewness calculation
 library(shinyjs) # For UI manipulations
+library(car) # Required for powerTransform (Yeo-Johnson)
 
 # Source utility R files (ensure these paths are correct relative to server.R)
-source("R/serversecond/gmms.R", local = TRUE)
-source("R/serversecond/standard_z.R", local = TRUE)
-source("R/serversecond/plotting.R", local = TRUE)
-
+# Corrected paths: they should be relative to the R/ directory where server.R resides
+source("serversecond/gmms.R", local = TRUE)
+source("serversecond/standard_z.R", local = TRUE)
+source("serversecond/plotting.R", local = TRUE)
+source("serversecond/yeo_johnson.R", local = TRUE) # New: Source Yeo-Johnson
+source("serversecond/data_prep.R", local = TRUE) # New: Source Data Prep
 
 # Reactive value for analysis status
 analysis_running_rv <- reactiveVal(FALSE)
@@ -410,7 +413,18 @@ server <- function(input, output, session) {
         return(NULL)
       }
 
-      incProgress(0.2, detail = "Splitting data by gender and transforming...")
+      incProgress(0.1, detail = "Applying universal plausibility limits...")
+      # Apply universal plausibility limits (placeholder call)
+      # Assuming apply_universal_plausibility_limits is in data_prep.R
+      gmm_data <- apply_universal_plausibility_limits(gmm_data)
+      if (nrow(gmm_data) == 0) {
+        message_rv(list(text = "No data remains after applying plausibility limits.", type = "warning"))
+        analysis_running_rv(FALSE)
+        shinyjs::enable("gmm_results_tabs")
+        return(NULL)
+      }
+
+      incProgress(0.1, detail = "Splitting data by gender and transforming...")
 
       # Normalize gender column to "Male" and "Female"
       gmm_data <- gmm_data %>%
@@ -431,9 +445,9 @@ server <- function(input, output, session) {
       # Process Male Data
       if (nrow(male_data) > 0) {
         message_rv(list(text = paste0("Processing ", nrow(male_data), " male records."), type = "info"))
-        # Apply conditional Yen-Johnson to HGB for males
-        # Note: apply_conditional_yen_johnson is a simplified log transform. For full YJ, car::powerTransform is better.
-        yj_result_male <- apply_conditional_yen_johnson(male_data$HGB)
+        # Apply conditional Yeo-Johnson to HGB for males
+        # Now using the function from yeo_johnson.R
+        yj_result_male <- apply_conditional_yeo_johnson(male_data$HGB)
         male_data$HGB_transformed <- yj_result_male$transformed_data
         male_hgb_transformed_flag <- yj_result_male$transformation_applied
 
@@ -443,16 +457,16 @@ server <- function(input, output, session) {
 
         incProgress(0.2, detail = "Running GMM for Male data...")
         tryCatch({
+          # GMM runs on the z-transformed data
           male_gmm_model <- run_gmm(male_data %>% dplyr::select(HGB = HGB_z, Age = Age_z))
           male_data <- assign_clusters(male_data, male_gmm_model)
-          # Re-assign cluster to the combined data (important for plotting original values)
+          # Ensure cluster is a factor for plotting
           male_data$cluster <- as.factor(male_data$cluster)
           message_rv(list(text = "GMM for male data complete.", type = "success"))
         }, error = function(e) {
           message_rv(list(text = paste("Error running GMM for male data:", e$message), type = "error"))
         })
-        # Select relevant columns and add to combined
-        # Keep original HGB for plotting and summary, but cluster is from transformed data
+        # Select relevant columns and add to combined, keeping original HGB for plotting
         combined_clustered_data <- bind_rows(combined_clustered_data,
                                              male_data %>% dplyr::select(HGB, Age, Gender, cluster))
       } else {
@@ -463,8 +477,9 @@ server <- function(input, output, session) {
       # Process Female Data
       if (nrow(female_data) > 0) {
         message_rv(list(text = paste0("Processing ", nrow(female_data), " female records."), type = "info"))
-        # Apply conditional Yen-Johnson to HGB for females
-        yj_result_female <- apply_conditional_yen_johnson(female_data$HGB)
+        # Apply conditional Yeo-Johnson to HGB for females
+        # Now using the function from yeo_johnson.R
+        yj_result_female <- apply_conditional_yeo_johnson(female_data$HGB)
         female_data$HGB_transformed <- yj_result_female$transformed_data
         female_hgb_transformed_flag <- yj_result_female$transformation_applied
 
@@ -474,16 +489,16 @@ server <- function(input, output, session) {
 
         incProgress(0.2, detail = "Running GMM for Female data...")
         tryCatch({
+          # GMM runs on the z-transformed data
           female_gmm_model <- run_gmm(female_data %>% dplyr::select(HGB = HGB_z, Age = Age_z))
           female_data <- assign_clusters(female_data, female_gmm_model)
-          # Re-assign cluster to the combined data (important for plotting original values)
+          # Ensure cluster is a factor for plotting
           female_data$cluster <- as.factor(female_data$cluster)
           message_rv(list(text = "GMM for female data complete.", type = "success"))
         }, error = function(e) {
           message_rv(list(text = paste("Error running GMM for female data:", e$message), type = "error"))
         })
-        # Select relevant columns and add to combined
-        # Keep original HGB for plotting and summary, but cluster is from transformed data
+        # Select relevant columns and add to combined, keeping original HGB for plotting
         combined_clustered_data <- bind_rows(combined_clustered_data,
                                              female_data %>% dplyr::select(HGB, Age, Gender, cluster))
       } else {
@@ -589,7 +604,7 @@ server <- function(input, output, session) {
 
     # Add a note about transformation if applied
     if (gmm_transformation_details_rv()$male_hgb_transformed || gmm_transformation_details_rv()$female_hgb_transformed) {
-      cat("\nNote: HGB values were transformed (log) for GMM input due to skewness. Reported HGB values are original.\n")
+      cat("\nNote: HGB values were transformed (Yeo-Johnson) for GMM input due to skewness. Reported HGB values are original.\n")
     }
   })
 
