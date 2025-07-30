@@ -1,14 +1,13 @@
 # R/utils.R
 
 # Function to generate a safe filename for plots
-generate_safe_filename <- function(plot_title, base_path, extension = "png") {
+generate_safe_filename <- function(prefix, extension = "png") {
   # Replace non-alphanumeric characters with underscores
-  safe_title <- gsub("[^a-zA-Z0-9_-]", "_", plot_title)
+  safe_title <- gsub("[^a-zA-Z0-9_.-]", "_", prefix)
   # Add date and time for uniqueness
-  datestamp <- format(Sys.Date(), "%Y%m%d")
-  timestamp <- format(Sys.time(), "%H%M%S") # Added seconds for more uniqueness
-  file.path(base_path, paste0(safe_title, "_", datestamp, "-", timestamp, ".", extension))
+  timestamp <- format(Sys.time(), "%Y%m%d_%H%M%S") # Added seconds for more uniqueness
+  paste0(safe_title, "_", timestamp, ".", extension) # Adjusted to just return filename
 }
 
-# You could add other utility functions here, e.g., data cleaning helpers,
-# custom validation functions, etc.
+# The server.R is already using file.path(output_dir_rv(), filename)
+# So this version is compatible.

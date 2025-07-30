@@ -1,9 +1,9 @@
-# app.Rsystem("type R")system("type R")
+# R/app.R
 
 # Load necessary libraries
 library(shiny)
 library(bslib)
-library(refineR)
+library(refineR) # Ensure this package is installed
 library(readxl)
 library(moments)
 library(shinyjs)
