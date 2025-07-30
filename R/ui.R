@@ -25,11 +25,10 @@ ui <- navbarPage(
 
       Shiny.addCustomMessageHandler('analysisStatus', function(status) {
         analysisRunning = status;
-        // Optionally disable/enable the tab links directly here
         if (status) {
-          $('a[data-value=\"Second Tab\"]').attr('data-toggle', 'disabled').addClass('disabled-tab-link');
+          $('a[data-value=\"Subpopulation Detection (GMM)\"]').attr('data-toggle', 'disabled').addClass('disabled-tab-link');
         } else {
-          $('a[data-value=\"Second Tab\"]').attr('data-toggle', 'tab').removeClass('disabled-tab-link');
+          $('a[data-value=\"Subpopulation Detection (GMM)\"]').attr('data-toggle', 'tab').removeClass('disabled-tab-link');
         }
       });
 
@@ -98,29 +97,24 @@ ui <- navbarPage(
   ),
 
   tabPanel(
-    title = "Second Tab",
-    useShinyjs(), # Ensure shinyjs is enabled for this tab too if needed
-    h4("Gaussian Mixture Model (GMM) Analysis"),
+    title = "Subpopulation Detection (GMM)", # Updated title
+    useShinyjs(),
+    h4("Detect Subpopulations using HGB and Age"), # Updated heading
+    p("Gaussian Mixture Models aim to detect hidden subpopulations within your data based on HGB and Age. The system will automatically select the best number of components (between 2 and 5) using the Bayesian Information Criterion (BIC), where the lowest BIC value indicates the optimal fit. For each detected subpopulation, estimated age ranges will be provided directly from the model's characteristics, avoiding predefined bins. While increasing the number of components can improve model fit, it also increases the risk of overfitting, where the model learns noise rather than true underlying patterns."), # Added explanation
     fluidRow(
       column(4,
              fileInput(inputId = "gmm_data_file", label = "Upload Data (Excel File)", accept = c(".xlsx")),
-             selectInput(inputId = "gmm_col_value", label = "Select Column for GMM Analysis:",
+             selectInput(inputId = "gmm_col_value", label = "Select Column for HGB Values:", # Clarified label
                          choices = c("None" = ""), selected = ""),
-             # Added for plotting with age
-             selectInput(inputId = "gmm_col_age", label = "Select Column for Age (for plotting):",
+             selectInput(inputId = "gmm_col_age", label = "Select Column for Age:", # Clarified label
                          choices = c("None" = ""), selected = ""),
-             numericInput(inputId = "gmm_n_components", label = "Number of GMM Components:", value = 2, min = 1),
-             actionButton("run_gmm_analysis", "Run GMM Analysis", class = "btn-primary"),
+             actionButton("run_gmm_analysis", "Run Subpopulation Detection", class = "btn-primary"), # Updated button label
              actionButton("reset_gmm_btn", "Reset GMM Data", class = "btn-secondary")
       ),
       column(8,
-             h4("GMM Results Plot"),
-             plotOutput("gmm_plot", height = "400px"),
-             h4("GMM Summary"),
-             verbatimTextOutput("gmm_summary")
+             uiOutput("gmm_results_ui") # This will render dynamic plots/summaries
       )
     )
-    # You can add more fluidRows or elements for other functionalities like RefineR or Z-scoring here
   ),
 
   footer = tags$footer(

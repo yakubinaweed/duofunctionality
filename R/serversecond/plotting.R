@@ -9,7 +9,7 @@ plot_ri_bars <- function(df_summary) {
          y = "HGB (g/dL)", x = "Subgroup")
 }
 
-plot_age_hgb <- function(df, age, hgb) { # Changed parameter names to age, hgb for direct use in aes()
+plot_age_hgb <- function(df, age, hgb) { # Parameter names reflect usage in aes()
   # Check if columns exist before plotting
   if (!age %in% colnames(df) || !hgb %in% colnames(df)) {
     warning(paste("Columns '", age, "' or '", hgb, "' not found in data frame for plotting.", sep=""))

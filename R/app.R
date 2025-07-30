@@ -1,4 +1,4 @@
-# app.Rsystem("type R")system("type R")
+# app.R
 
 # Load necessary libraries
 library(shiny)

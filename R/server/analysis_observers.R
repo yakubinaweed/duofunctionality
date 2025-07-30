@@ -93,8 +93,8 @@ call_analysis_observer <- function(input, output, session, data_reactive, select
             gender_col_name = isolated_inputs$col_gender,
             refiner_output = refiner_result,
             unit = isolated_inputs$unit_input,
-            input_low = isolated_inputs$ref_low, # Pass the direct input values
-            input_high = isolated_inputs$ref_high, # Pass the direct input values
+            input_low = isolated_inputs$ref_low,
+            input_high = isolated_inputs$ref_high,
             z_data = z_transformed_data # Pass z-transformed data for plotting
           )
         } else {
